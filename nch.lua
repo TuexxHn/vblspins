@@ -278,48 +278,76 @@ ActionBtn("Scan Args", 375, function()
     Notify("Scan: "..#State.ActiveArgs[REWARD_KEY].." validos", Theme.Green)
 end, Theme.Green)
 
+-- ══ TARGETS CONHECIDOS ══
+local WIN_TARGETS = {
+    "GameService.GameEnded",
+    "GameService.PointScore",
+    "RankedService.ForfeitServerVote",
+    "RankedService.RejoinRankedGame",
+    "PlayFabMatchmakingService.OnMatchFound",
+}
+local EXP_TARGETS = {
+    "LevelService.LevelUp",
+    "LevelService.ClaimLevelRewards",
+    "SeasonService.RequestRankedReward",
+    "SeasonService.RequestRewardClaim",
+    "SeasonService.RequestMilestoneReward",
+    "SeasonService.RequestRebirthReward",
+    "MasteryService.RequestClaim",
+    "MasteryService.RequestInvest",
+    "LeaderboardRewardService.RequestReward",
+}
+local YEN_TARGETS = {
+    "RewardService.RequestReward",
+    "IdleService.OnReward",
+    "IdleService.GetModifiedChances",
+    "DailyRewardService.RerollDailyTask",
+    "QuestService.Claim",
+    "QuestService.ClaimAll",
+    "ChallengeService.ClaimReward",
+    "SeasonService.ClaimDailyPresent",
+    "SeasonService.RefreshDailyPresents",
+}
+local LUCKY_TARGETS = {
+    "SeasonService.RequestRankedReward",
+    "StyleService.Roll",
+    "AbilityService.Roll",
+    "StyleService.SelectChance",
+    "AbilityService.SelectChance",
+    "CrateService.RequestOpen",
+}
+
+local function fireTargets(targets, arg1)
+    for _, key in ipairs(targets) do
+        local r = State.Remotes[key]
+        if r then
+            if r:IsA("RemoteFunction") then
+                safeInvoke(r, arg1)
+            else
+                safeFireServer(r, arg1)
+            end
+            task.wait(0.15)
+        end
+    end
+end
+
 -- ══ FARM ENGINE ══
 task.spawn(function()
     while true do
         jitterWait()
-        local rf = State.Remotes[REWARD_KEY]
-        if rf then
-            local args = State.ActiveArgs[REWARD_KEY]
-            if args and #args > 0 then
-                for _, a in ipairs(args) do
-                    if State.AutoLucky or State.AutoYen or State.AutoSkills then
-                        safeInvoke(rf, a); task.wait(0.2)
-                    end
-                end
-            else
-                if State.AutoLucky  then safeInvoke(rf, 1) end
-                if State.AutoYen    then safeInvoke(rf, 2) end
-                if State.AutoSkills then safeInvoke(rf, 4) end
-            end
+        if State.AutoLucky  then fireTargets(LUCKY_TARGETS, 1) end
+        if State.AutoYen    then fireTargets(YEN_TARGETS, nil) end
+        if State.AutoSkills then
+            local sk = State.Remotes["AbilityService.UseAbility"]
+            if sk then safeInvoke(sk, nil) end
+            local sk2 = State.Remotes["AbilityService.SelectSlot"]
+            if sk2 then safeInvoke(sk2, 1) end
         end
-        if State.AutoWin and math.random(1, 5) == 1 then
-            task.spawn(function()
-                for name, remote in pairs(State.Remotes) do
-                    local n = name:lower()
-                    if n:find("win") or n:find("match") or n:find("result") or n:find("finish") then
-                        safeInvoke(remote, true)
-                        safeFireServer(remote, true)
-                        jitterWait()
-                    end
-                end
-            end)
+        if State.AutoWin and math.random(1, 3) == 1 then
+            task.spawn(function() fireTargets(WIN_TARGETS, true) end)
         end
-        if State.AutoEXP and math.random(1, 5) == 1 then
-            task.spawn(function()
-                for name, remote in pairs(State.Remotes) do
-                    local n = name:lower()
-                    if n:find("exp") or n:find("xp") or n:find("progress") then
-                        safeInvoke(remote, 999)
-                        safeFireServer(remote, 999)
-                        jitterWait()
-                    end
-                end
-            end)
+        if State.AutoEXP and math.random(1, 3) == 1 then
+            task.spawn(function() fireTargets(EXP_TARGETS, nil) end)
         end
     end
 end)
