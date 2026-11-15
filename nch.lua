@@ -26,9 +26,19 @@ local Theme = {
 }
 
 local function jitterWait() task.wait(CFG.Speed + math.random()*CFG.JitterMax) end
-local function log(tag,...) print("[NCH]["..tag.."]",...) end
-local function safeInvoke(rf,...) local ok2,r=pcall(function() return rf:InvokeServer(...) end) if ok2 then return r end return nil end
-local function safeFireServer(re,...) pcall(function() re:FireServer(...) end) end
+local function log(tag,...)
+    local args = {...}
+    print("[NCH]["..tag.."]", unpack(args))
+end
+local function safeInvoke(rf,...)
+    local args = {...}
+    local ok2,r = pcall(function() return rf:InvokeServer(unpack(args)) end)
+    if ok2 then return r end return nil
+end
+local function safeFireServer(re,...)
+    local args = {...}
+    pcall(function() re:FireServer(unpack(args)) end)
+end
 
 local function resolvePath(root,...)
     local cur=root
