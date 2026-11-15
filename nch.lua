@@ -1,4 +1,4 @@
--- NCH v4 | TuexxHn/vblspins — stealth build
+-- NCH v5 | TuexxHn/vblspins — rank probe + farm
 local ok, err = pcall(function()
 
 local Players = game:GetService("Players")
@@ -8,57 +8,21 @@ local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 local pgui = lp.PlayerGui
 
-if pgui:FindFirstChild("NCH_v4") then pgui.NCH_v4:Destroy() end
+if pgui:FindFirstChild("NCH_v5") then pgui.NCH_v5:Destroy() end
 
--- jitter humano: 3–9s entre qualquer fire
-local CFG = {
-    MinWait = 3.0,
-    MaxWait = 6.0,
-    KNIT_PKG = "sleitnick_knit@1.7.0",
-}
+_G.AutoLucky = false
+_G.AutoYen   = false
+_G.AutoSkills = false
+_G.Speed = 0.7
+_G.ValidArgs = {}  -- preenchido pelo probe
 
-local State = {
-    AutoIdle=false, AutoQuest=false, AutoChallenge=false,
-    AutoDaily=false, AutoAbility=false,
-    Remotes={},
-}
-
-local Theme = {
-    Bg=Color3.fromRGB(20,10,35), BgLight=Color3.fromRGB(35,20,55),
-    Active=Color3.fromRGB(45,25,70), Cyan=Color3.fromRGB(0,200,255),
-    Orange=Color3.fromRGB(255,100,0), Green=Color3.fromRGB(0,220,100),
-    White=Color3.fromRGB(255,255,255),
-}
-
-local function humanWait()
-    -- espera humana com ruido gaussiano simulado
-    local base = CFG.MinWait + math.random() * (CFG.MaxWait - CFG.MinWait)
-    local noise = (math.random() - 0.5) * 1.2
-    task.wait(math.max(2.0, base + noise))
-end
+local KNIT = "sleitnick_knit@1.7.0"
 
 local function log(tag, msg)
     print("[NCH]["..tag.."] "..tostring(msg or ""))
 end
 
--- invoke seguro sem retentativa — falhou, passou
-local function safeInvoke(rf, arg1)
-    local ok2, r = pcall(function()
-        if arg1 ~= nil then return rf:InvokeServer(arg1)
-        else return rf:InvokeServer() end
-    end)
-    if ok2 then return r end
-    return nil
-end
-
-local function safeFireServer(re, arg1)
-    pcall(function()
-        if arg1 ~= nil then re:FireServer(arg1)
-        else re:FireServer() end
-    end)
-end
-
-local function resolvePath(root, a, b, c, d, e, f, g, h)
+local function getPath(root, a, b, c, d, e, f, g, h)
     local cur = root
     local parts = {a, b, c, d, e, f, g, h}
     for _, name in ipairs(parts) do
@@ -75,19 +39,38 @@ local function resolvePath(root, a, b, c, d, e, f, g, h)
     return cur
 end
 
-local function fireRemote(key, arg1)
-    local r = State.Remotes[key]
-    if not r then return end
-    if r:IsA("RemoteFunction") then safeInvoke(r, arg1)
-    else safeFireServer(r, arg1) end
+-- remote principal — mesmo do original
+local Remote = getPath(RS, "Packages", "_Index", KNIT, "knit", "Services", "SeasonService", "RF", "RequestRankedReward")
+-- ranked service para checar rank
+local RankRemote = getPath(RS, "Packages", "_Index", KNIT, "knit", "Services", "RankedService", "RF", "FetchPlayerRankId")
+
+if not Remote then
+    print("[NCH] ERRO: RequestRankedReward nao encontrado")
+    return
+end
+
+log("BOOT", "remotes ok")
+if RankRemote then
+    local rankOk, rankVal = pcall(function() return RankRemote:InvokeServer() end)
+    if rankOk and rankVal ~= nil then
+        log("RANK", "rank atual: "..tostring(rankVal))
+    else
+        log("RANK", "nao retornou rank")
+    end
 end
 
 -- ══ UI ══
 local NetworkUI = Instance.new("ScreenGui")
-NetworkUI.Name = "NCH_v4"
+NetworkUI.Name = "NCH_v5"
 NetworkUI.ResetOnSpawn = false
 NetworkUI.Parent = pgui
-log("BOOT", "UI criada")
+
+local Theme = {
+    Bg=Color3.fromRGB(20,10,35), BgLight=Color3.fromRGB(35,20,55),
+    Active=Color3.fromRGB(45,25,70), Cyan=Color3.fromRGB(0,200,255),
+    Orange=Color3.fromRGB(255,100,0), Green=Color3.fromRGB(0,220,100),
+    White=Color3.fromRGB(255,255,255),
+}
 
 local function makeDraggable(frame)
     local drag, di, ds, sp
@@ -151,7 +134,7 @@ NBtn.MouseLeave:Connect(function()
 end)
 
 local Main = Instance.new("Frame", NetworkUI)
-Main.Size = UDim2.new(0, 250, 0, 400)
+Main.Size = UDim2.new(0, 250, 0, 390)
 Main.Position = UDim2.new(0.5, -125, 1.2, 0)
 Main.BackgroundColor3 = Theme.Bg; Main.ClipsDescendants = true
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
@@ -167,7 +150,7 @@ end)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 50)
-Title.Text = "<font color='#00C8FF'>NETWORK</font> <font color='#FF6400'>CODE</font> <font color='#00DC64'>v4</font>"
+Title.Text = "<font color='#00C8FF'>NETWORK</font> <font color='#FF6400'>CODE</font> <font color='#00DC64'>v5</font>"
 Title.RichText = true; Title.Font = Enum.Font.GothamBlack
 Title.TextSize = 16; Title.BackgroundTransparency = 1
 Title.TextColor3 = Theme.White
@@ -189,8 +172,8 @@ local function CreateToggle(name, y, key, color)
     local bs = Instance.new("UIStroke", btn)
     bs.Color = color or Theme.Cyan; bs.Transparency = 0.5
     btn.MouseButton1Click:Connect(function()
-        State[key] = not State[key]
-        local a = State[key]
+        _G[key] = not _G[key]
+        local a = _G[key]
         btn.Text = a and (name.."\n<font size='9'>[ ON ]</font>") or name
         btn.RichText = true
         TweenService:Create(btn, TweenInfo.new(0.2), {
@@ -203,12 +186,6 @@ local function CreateToggle(name, y, key, color)
         }):Play()
         if a then Notify("NCH: "..name.." ON", color) end
     end)
-end
-
-local function Sep(y)
-    local l = Instance.new("Frame", Main)
-    l.Size = UDim2.new(0.88, 0, 0, 1); l.Position = UDim2.new(0.06, 0, 0, y)
-    l.BackgroundColor3 = Theme.Cyan; l.BackgroundTransparency = 0.7; l.BorderSizePixel = 0
 end
 
 local function ActionBtn(label, y, fn, color)
@@ -227,89 +204,78 @@ local function ActionBtn(label, y, fn, color)
     end)
 end
 
--- toggles — só remotes passivos/seguros
-CreateToggle("Idle Reward",     58,  "AutoIdle",      Theme.Cyan)
-CreateToggle("Quest Claim",     108, "AutoQuest",     Theme.Orange)
-CreateToggle("Challenge Claim", 158, "AutoChallenge", Theme.Cyan)
-CreateToggle("Daily Present",   208, "AutoDaily",     Theme.Green)
-Sep(258)
-CreateToggle("Auto Ability",    268, "AutoAbility",   Theme.Cyan)
-Sep(318)
+CreateToggle("Lucky Spin",  58,  "AutoLucky",  Theme.Cyan)
+CreateToggle("Yen Farm",    108, "AutoYen",    Theme.Orange)
+CreateToggle("Habilidades", 158, "AutoSkills", Theme.Cyan)
 
--- Discover silencioso — sem log agressivo
-ActionBtn("Discover Remotes", 328, function()
-    local idx = resolvePath(RS, "Packages", "_Index")
-    if not idx then Notify("ERRO: _Index", Theme.Orange) return end
-    local kpkg = idx:FindFirstChild(CFG.KNIT_PKG)
-    if not kpkg then
-        for _, v in ipairs(idx:GetChildren()) do
-            if v.Name:find("sleitnick_knit") then kpkg = v break end
-        end
-    end
-    if not kpkg then Notify("ERRO: knit pkg", Theme.Orange) return end
-    local svcs = resolvePath(kpkg, "knit", "Services")
-    if not svcs then Notify("ERRO: Services", Theme.Orange) return end
-    for _, svc in ipairs(svcs:GetChildren()) do
-        for _, folder in ipairs({"RF", "RE"}) do
-            local f = svc:FindFirstChild(folder)
-            if f then
-                for _, r in ipairs(f:GetChildren()) do
-                    if r:IsA("RemoteFunction") or r:IsA("RemoteEvent") then
-                        State.Remotes[svc.Name.."."..r.Name] = r
-                    end
-                end
+-- Probe: testa args 1–20 no teu rank atual e salva os que retornam algo
+ActionBtn("Probe Rank Args", 215, function()
+    _G.ValidArgs = {}
+    log("PROBE", "iniciando probe 1-20")
+    Notify("Probe iniciado...", Theme.Cyan)
+    for i = 1, 20 do
+        task.wait(0.6)
+        local ok2, r = pcall(function() return Remote:InvokeServer(i) end)
+        if ok2 and r ~= nil then
+            local rtype = type(r)
+            local rval = rtype == "boolean" and tostring(r) or (rtype == "table" and "table" or tostring(r))
+            log("PROBE", "arg "..i.." -> "..rval)
+            if r ~= false then
+                table.insert(_G.ValidArgs, i)
+                log("PROBE", "arg "..i.." VALIDO")
             end
         end
     end
-    local c = 0
-    for _ in pairs(State.Remotes) do c = c + 1 end
-    Notify("Discovery: "..c.." remotes", Theme.Cyan)
+    local found = #_G.ValidArgs
+    if found > 0 then
+        local argstr = ""
+        for idx, v in ipairs(_G.ValidArgs) do
+            argstr = argstr..(idx > 1 and "," or "")..tostring(v)
+        end
+        log("PROBE", "args validos: "..argstr)
+        Notify("Probe: args ["..argstr.."] validos!", Theme.Green)
+    else
+        log("PROBE", "nenhum arg valido no rank atual")
+        Notify("Probe: nenhum arg valido (rank insuficiente?)", Theme.Orange)
+    end
 end, Theme.Cyan)
 
--- ══ FARM ENGINE — cadência humana ══
+ActionBtn("Check Rank", 260, function()
+    if not RankRemote then
+        Notify("RankRemote nao encontrado", Theme.Orange)
+        return
+    end
+    local ok2, r = pcall(function() return RankRemote:InvokeServer() end)
+    if ok2 and r ~= nil then
+        log("RANK", tostring(r))
+        Notify("Rank: "..tostring(r), Theme.Green)
+    else
+        Notify("Rank nao retornou valor", Theme.Orange)
+    end
+end, Theme.Green)
+
+-- ══ FARM ENGINE — igual ao original + args dinâmicos ══
 task.spawn(function()
     while true do
-        humanWait()
-
-        -- Idle reward — o server chama de volta, cliente só pede
-        if State.AutoIdle then
-            fireRemote("IdleService.OnReward", nil)
+        task.wait(_G.Speed + math.random() * 0.3)
+        -- usa args do probe se disponíveis, senão usa os originais
+        if _G.AutoLucky then
+            local arg = (_G.ValidArgs and _G.ValidArgs[1]) or 1
+            pcall(function() Remote:InvokeServer(arg) end)
         end
-
-        humanWait()
-
-        -- Quest/Challenge — só claim quando já completou no servidor
-        if State.AutoQuest then
-            fireRemote("QuestService.Claim", nil)
-            task.wait(1.5)
-            fireRemote("QuestService.ClaimAll", nil)
+        if _G.AutoYen then
+            local arg = (_G.ValidArgs and _G.ValidArgs[2]) or 2
+            pcall(function() Remote:InvokeServer(arg) end)
         end
-
-        humanWait()
-
-        if State.AutoChallenge then
-            fireRemote("ChallengeService.ClaimReward", nil)
-        end
-
-        humanWait()
-
-        if State.AutoDaily then
-            fireRemote("SeasonService.ClaimDailyPresent", nil)
-        end
-
-        humanWait()
-
-        -- Ability — ação de gameplay normal, não suspeita
-        if State.AutoAbility then
-            fireRemote("AbilityService.UseAbility", nil)
-            task.wait(0.8)
-            fireRemote("AbilityService.SelectSlot", 1)
+        if _G.AutoSkills then
+            local arg = (_G.ValidArgs and _G.ValidArgs[3]) or 4
+            pcall(function() Remote:InvokeServer(arg) end)
         end
     end
 end)
 
-Notify("NCH v4 carregado — stealth mode", Theme.Cyan)
-log("BOOT", "completo v4")
+Notify("NCH v5 carregado", Theme.Cyan)
+log("BOOT", "completo v5")
 
 end)
 if not ok then print("[NCH] ERRO FATAL: "..tostring(err)) end
