@@ -1,4 +1,4 @@
--- NCH v3 | TuexxHn/vblspins
+-- NCH v4 | TuexxHn/vblspins — stealth build
 local ok, err = pcall(function()
 
 local Players = game:GetService("Players")
@@ -8,16 +8,21 @@ local UIS = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 local pgui = lp.PlayerGui
 
-if pgui:FindFirstChild("NCH_v3") then pgui.NCH_v3:Destroy() end
+if pgui:FindFirstChild("NCH_v4") then pgui.NCH_v4:Destroy() end
 
-local CFG = { Speed=0.8, JitterMax=0.4, ScanArgs={1,2,3,4,5,6,7,8,10,11,12,20,50,100} }
-local KNIT_PKG = "sleitnick_knit@1.7.0"
-local REWARD_KEY = "SeasonService.RequestRankedReward"
-local State = {
-    AutoLucky=false, AutoYen=false, AutoSkills=false,
-    AutoWin=false, AutoEXP=false,
-    ActiveArgs={}, Remotes={},
+-- jitter humano: 3–9s entre qualquer fire
+local CFG = {
+    MinWait = 3.0,
+    MaxWait = 6.0,
+    KNIT_PKG = "sleitnick_knit@1.7.0",
 }
+
+local State = {
+    AutoIdle=false, AutoQuest=false, AutoChallenge=false,
+    AutoDaily=false, AutoAbility=false,
+    Remotes={},
+}
+
 local Theme = {
     Bg=Color3.fromRGB(20,10,35), BgLight=Color3.fromRGB(35,20,55),
     Active=Color3.fromRGB(45,25,70), Cyan=Color3.fromRGB(0,200,255),
@@ -25,21 +30,22 @@ local Theme = {
     White=Color3.fromRGB(255,255,255),
 }
 
-local function jitterWait()
-    task.wait(CFG.Speed + math.random()*CFG.JitterMax)
+local function humanWait()
+    -- espera humana com ruido gaussiano simulado
+    local base = CFG.MinWait + math.random() * (CFG.MaxWait - CFG.MinWait)
+    local noise = (math.random() - 0.5) * 1.2
+    task.wait(math.max(2.0, base + noise))
 end
 
 local function log(tag, msg)
     print("[NCH]["..tag.."] "..tostring(msg or ""))
 end
 
+-- invoke seguro sem retentativa — falhou, passou
 local function safeInvoke(rf, arg1)
     local ok2, r = pcall(function()
-        if arg1 ~= nil then
-            return rf:InvokeServer(arg1)
-        else
-            return rf:InvokeServer()
-        end
+        if arg1 ~= nil then return rf:InvokeServer(arg1)
+        else return rf:InvokeServer() end
     end)
     if ok2 then return r end
     return nil
@@ -47,11 +53,8 @@ end
 
 local function safeFireServer(re, arg1)
     pcall(function()
-        if arg1 ~= nil then
-            re:FireServer(arg1)
-        else
-            re:FireServer()
-        end
+        if arg1 ~= nil then re:FireServer(arg1)
+        else re:FireServer() end
     end)
 end
 
@@ -66,15 +69,22 @@ local function resolvePath(root, a, b, c, d, e, f, g, h)
             local ok2, c2 = pcall(function() return cur:WaitForChild(name, 2) end)
             child = ok2 and c2 or nil
         end
-        if not child then log("PATH", "miss: "..name) return nil end
+        if not child then return nil end
         cur = child
     end
     return cur
 end
 
--- ══ UI PRIMEIRO ══
+local function fireRemote(key, arg1)
+    local r = State.Remotes[key]
+    if not r then return end
+    if r:IsA("RemoteFunction") then safeInvoke(r, arg1)
+    else safeFireServer(r, arg1) end
+end
+
+-- ══ UI ══
 local NetworkUI = Instance.new("ScreenGui")
-NetworkUI.Name = "NCH_v3"
+NetworkUI.Name = "NCH_v4"
 NetworkUI.ResetOnSpawn = false
 NetworkUI.Parent = pgui
 log("BOOT", "UI criada")
@@ -141,7 +151,7 @@ NBtn.MouseLeave:Connect(function()
 end)
 
 local Main = Instance.new("Frame", NetworkUI)
-Main.Size = UDim2.new(0, 250, 0, 440)
+Main.Size = UDim2.new(0, 250, 0, 400)
 Main.Position = UDim2.new(0.5, -125, 1.2, 0)
 Main.BackgroundColor3 = Theme.Bg; Main.ClipsDescendants = true
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
@@ -157,7 +167,7 @@ end)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 50)
-Title.Text = "<font color='#00C8FF'>NETWORK</font> <font color='#FF6400'>CODE</font> <font color='#00DC64'>v3</font>"
+Title.Text = "<font color='#00C8FF'>NETWORK</font> <font color='#FF6400'>CODE</font> <font color='#00DC64'>v4</font>"
 Title.RichText = true; Title.Font = Enum.Font.GothamBlack
 Title.TextSize = 16; Title.BackgroundTransparency = 1
 Title.TextColor3 = Theme.White
@@ -217,18 +227,20 @@ local function ActionBtn(label, y, fn, color)
     end)
 end
 
-CreateToggle("Lucky Spin",    58,  "AutoLucky",  Theme.Cyan)
-CreateToggle("Yen Farm",      108, "AutoYen",    Theme.Orange)
-CreateToggle("Habilidades",   158, "AutoSkills", Theme.Cyan)
-Sep(208)
-CreateToggle("Auto Win",      218, "AutoWin",    Theme.Green)
-CreateToggle("Auto EXP/Rank", 268, "AutoEXP",    Theme.Green)
+-- toggles — só remotes passivos/seguros
+CreateToggle("Idle Reward",     58,  "AutoIdle",      Theme.Cyan)
+CreateToggle("Quest Claim",     108, "AutoQuest",     Theme.Orange)
+CreateToggle("Challenge Claim", 158, "AutoChallenge", Theme.Cyan)
+CreateToggle("Daily Present",   208, "AutoDaily",     Theme.Green)
+Sep(258)
+CreateToggle("Auto Ability",    268, "AutoAbility",   Theme.Cyan)
 Sep(318)
 
+-- Discover silencioso — sem log agressivo
 ActionBtn("Discover Remotes", 328, function()
     local idx = resolvePath(RS, "Packages", "_Index")
     if not idx then Notify("ERRO: _Index", Theme.Orange) return end
-    local kpkg = idx:FindFirstChild(KNIT_PKG)
+    local kpkg = idx:FindFirstChild(CFG.KNIT_PKG)
     if not kpkg then
         for _, v in ipairs(idx:GetChildren()) do
             if v.Name:find("sleitnick_knit") then kpkg = v break end
@@ -244,7 +256,6 @@ ActionBtn("Discover Remotes", 328, function()
                 for _, r in ipairs(f:GetChildren()) do
                     if r:IsA("RemoteFunction") or r:IsA("RemoteEvent") then
                         State.Remotes[svc.Name.."."..r.Name] = r
-                        log("DISC", svc.Name.."."..r.Name)
                     end
                 end
             end
@@ -255,105 +266,50 @@ ActionBtn("Discover Remotes", 328, function()
     Notify("Discovery: "..c.." remotes", Theme.Cyan)
 end, Theme.Cyan)
 
-ActionBtn("Scan Args", 375, function()
-    local rf = State.Remotes[REWARD_KEY]
-    if not rf then
-        rf = resolvePath(RS, "Packages", "_Index", KNIT_PKG, "knit", "Services", "SeasonService", "RF")
-        if rf then rf = rf:FindFirstChild("RequestRankedReward") end
-    end
-    if not rf then Notify("ERRO: reward remote", Theme.Orange) return end
-    State.Remotes[REWARD_KEY] = rf
-    State.ActiveArgs[REWARD_KEY] = {}
-    for _, arg in ipairs(CFG.ScanArgs) do
-        task.wait(0.3)
-        local r = safeInvoke(rf, arg)
-        if r ~= nil then
-            log("SCAN", "arg "..tostring(arg).." -> "..tostring(r))
-            if r == true or type(r) == "table" or (type(r) == "number" and r > 0) then
-                table.insert(State.ActiveArgs[REWARD_KEY], arg)
-                log("SCAN", "arg "..tostring(arg).." VALIDO")
-            end
-        end
-    end
-    Notify("Scan: "..#State.ActiveArgs[REWARD_KEY].." validos", Theme.Green)
-end, Theme.Green)
-
--- ══ TARGETS CONHECIDOS ══
-local WIN_TARGETS = {
-    "GameService.GameEnded",
-    "GameService.PointScore",
-    "RankedService.ForfeitServerVote",
-    "RankedService.RejoinRankedGame",
-    "PlayFabMatchmakingService.OnMatchFound",
-}
-local EXP_TARGETS = {
-    "LevelService.LevelUp",
-    "LevelService.ClaimLevelRewards",
-    "SeasonService.RequestRankedReward",
-    "SeasonService.RequestRewardClaim",
-    "SeasonService.RequestMilestoneReward",
-    "SeasonService.RequestRebirthReward",
-    "MasteryService.RequestClaim",
-    "MasteryService.RequestInvest",
-    "LeaderboardRewardService.RequestReward",
-}
-local YEN_TARGETS = {
-    "RewardService.RequestReward",
-    "IdleService.OnReward",
-    "IdleService.GetModifiedChances",
-    "DailyRewardService.RerollDailyTask",
-    "QuestService.Claim",
-    "QuestService.ClaimAll",
-    "ChallengeService.ClaimReward",
-    "SeasonService.ClaimDailyPresent",
-    "SeasonService.RefreshDailyPresents",
-}
-local LUCKY_TARGETS = {
-    "SeasonService.RequestRankedReward",
-    "StyleService.Roll",
-    "AbilityService.Roll",
-    "StyleService.SelectChance",
-    "AbilityService.SelectChance",
-    "CrateService.RequestOpen",
-}
-
-local function fireTargets(targets, arg1)
-    for _, key in ipairs(targets) do
-        local r = State.Remotes[key]
-        if r then
-            if r:IsA("RemoteFunction") then
-                safeInvoke(r, arg1)
-            else
-                safeFireServer(r, arg1)
-            end
-            task.wait(0.15)
-        end
-    end
-end
-
--- ══ FARM ENGINE ══
+-- ══ FARM ENGINE — cadência humana ══
 task.spawn(function()
     while true do
-        jitterWait()
-        if State.AutoLucky  then fireTargets(LUCKY_TARGETS, 1) end
-        if State.AutoYen    then fireTargets(YEN_TARGETS, nil) end
-        if State.AutoSkills then
-            local sk = State.Remotes["AbilityService.UseAbility"]
-            if sk then safeInvoke(sk, nil) end
-            local sk2 = State.Remotes["AbilityService.SelectSlot"]
-            if sk2 then safeInvoke(sk2, 1) end
+        humanWait()
+
+        -- Idle reward — o server chama de volta, cliente só pede
+        if State.AutoIdle then
+            fireRemote("IdleService.OnReward", nil)
         end
-        if State.AutoWin and math.random(1, 3) == 1 then
-            task.spawn(function() fireTargets(WIN_TARGETS, true) end)
+
+        humanWait()
+
+        -- Quest/Challenge — só claim quando já completou no servidor
+        if State.AutoQuest then
+            fireRemote("QuestService.Claim", nil)
+            task.wait(1.5)
+            fireRemote("QuestService.ClaimAll", nil)
         end
-        if State.AutoEXP and math.random(1, 3) == 1 then
-            task.spawn(function() fireTargets(EXP_TARGETS, nil) end)
+
+        humanWait()
+
+        if State.AutoChallenge then
+            fireRemote("ChallengeService.ClaimReward", nil)
+        end
+
+        humanWait()
+
+        if State.AutoDaily then
+            fireRemote("SeasonService.ClaimDailyPresent", nil)
+        end
+
+        humanWait()
+
+        -- Ability — ação de gameplay normal, não suspeita
+        if State.AutoAbility then
+            fireRemote("AbilityService.UseAbility", nil)
+            task.wait(0.8)
+            fireRemote("AbilityService.SelectSlot", 1)
         end
     end
 end)
 
-Notify("NCH v3 carregado", Theme.Cyan)
-log("BOOT", "completo")
+Notify("NCH v4 carregado — stealth mode", Theme.Cyan)
+log("BOOT", "completo v4")
 
 end)
 if not ok then print("[NCH] ERRO FATAL: "..tostring(err)) end
